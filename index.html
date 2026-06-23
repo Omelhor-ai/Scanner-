@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Scanner de Privacidade</title>
+    <style>
+        body {
+            font-family: 'Courier New', monospace;
+            background-color: #0a0f0d;
+            color: #00ff66;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            box-sizing: border-box;
+        }
+        .painel {
+            background-color: #111a16;
+            border: 2px solid #00ff66;
+            border-radius: 8px;
+            padding: 20px;
+            width: 100%;
+            max-width: 500px;
+            box-shadow: 0 0 20px rgba(0, 255, 102, 0.2);
+        }
+        h1 {
+            font-size: 18px;
+            text-align: center;
+            text-transform: uppercase;
+            border-bottom: 1px dashed #00ff66;
+            padding-bottom: 10px;
+        }
+        .status-carregando {
+            text-align: center;
+            font-size: 16px;
+            margin: 30px 0;
+        }
+        .piscar {
+            animation: piscarAnimacao 1s infinite;
+        }
+        @keyframes piscarAnimacao {
+            0% { opacity: 0; }
+            50% { opacity: 1; }
+            100% { opacity: 0; }
+        }
+        .bloco-dados {
+            display: none;
+            margin-top: 20px;
+        }
+        .linha {
+            margin: 12px 0;
+            font-size: 14px;
+            word-wrap: break-word;
+        }
+        .label {
+            color: #88ffaa;
+            font-weight: bold;
+        }
+        .aviso-gps {
+            font-size: 11px;
+            color: #ffcc00;
+            text-align: center;
+            margin-top: 20px;
+            border: 1px solid #ffcc00;
+            padding: 8px;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="painel">
+        <h1>🔍 Scanner de Dados Públicos</h1>
+        
+        <div id="carregando" class="status-carregando">
+            <span class="piscar">⚡ ANALISANDO DISPOSITIVO...</span>
+        </div>
+
+        <div id="resultados" class="bloco-dados">
+            <div class="linha"><span class="label">> SISTEMA:</span> <span id="sistema">Identificando...</span></div>
+            <div class="linha"><span class="label">> BATERIA:</span> <span id="bateria">Buscando...</span></div>
+            <div class="linha"><span class="label">> CONEXÃO:</span> <span id="internet">Testando...</span></div>
+            <div class="linha"><span class="label">> IP PÚBLICO:</span> <span id="ip">Rastreando...</span></div>
+            <div class="linha"><span class="label">> REGIÃO:</span> <span id="regiao">Localizando...</span></div>
+            <div class="linha"><span class="label">> RUA/BAIRRO:</span> <span id="endereco-gps">Aguardando GPS...</span></div>
+            
+            <div id="alerta" class="aviso-gps">
+                💡 Permita o acesso à localização para ver a sua Rua e o seu Bairro na tela!
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Inicia o scan após 3 segundos
+        setTimeout(iniciarScan, 3000);
+
+        async function iniciarScan() {
+            document.getElementById('carregando').style.display = 'none';
+            document.getElementById('resultados').style.display = 'block';
+
+            // 1. Detectar o Sistema
+            let agente = navigator.userAgent;
+            let so = "Outro Sistema";
+            if (agente.includes("Android")) so = "Android OS";
+            else if (agente.includes("iPhone")) so = "iOS (iPhone)";
+            else if (agente.includes("Windows")) so = "Windows PC";
+            document.getElementById('sistema').innerText = so;
+
+            // 2. Detectar a Bateria
+            if (navigator.getBattery) {
+                try {
+                    const bat = await navigator.getBattery();
+                    let nivel = Math.round(bat.level * 100) + "%";
+                    let status = bat.charging ? " (Tomada)" : " (Bateria)";
+                    document.getElementById('bateria').innerText = nivel + status;
+                } catch (e) {
+                    document.getElementById('bateria').innerText = "Erro nos sensores";
+                }
+            } else {
+                document.getElementById('bateria').innerText = "Não suportado";
+            }
+
+            // 3. Tipo de Internet
+            if (navigator.connection) {
+                let conn = navigator.connection;
+                document.getElementById('internet').innerText = `Rede ${conn.effectiveType || 'Desconhecida'}`;
+            } else {
+                document.getElementById('internet').innerText = "Conectado";
+            }
+
+            // 4. IP e Cidade aproximada
+            try {
+                const res = await fetch('https://ipapi.co/json/');
+                const dados = await res.json();
+                if (dados.ip) {
+                    document.getElementById('ip').innerText = dados.ip;
+                    document.getElementById('regiao').innerText = `${dados.city} - ${dados.region}`;
+                }
+            } catch (err) {
+                document.getElementById('ip').innerText = "Erro ao buscar";
+                document.getElementById('regiao').innerText = "Erro ao buscar";
+            }
+
+            // 5. Rua e Bairro Real pelo GPS
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(async (pos) => {
+                    let lat = pos.coords.latitude;
+                    let lon = pos.coords.longitude;
+                    document.getElementById('alerta').style.display = 'none';
+
+                    try {
+                        const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}`;
+                        const mapaRes = await fetch(url);
+                        const mapaDados = await mapaRes.json();
+                        if (mapaDados.address) {
+                            let rua = mapaDados.address.road || "Rua Oculta";
+                            let bairro = mapaDados.address.suburb || mapaDados.address.neighbourhood || "Bairro Oculto";
+                            document.getElementById('endereco-gps').innerText = `${rua}, ${bairro}`;
+                        }
+                    } catch (e) {
+                        document.getElementById('endereco-gps').innerText = "Erro na rua";
+                    }
+                }, () => {
+                    document.getElementById('endereco-gps').innerText = "GPS Recusado";
+                });
+            } else {
+                document.getElementById('endereco-gps').innerText = "Sem suporte a GPS";
+            }
+        }
+    </script>
+</body>
+</html>
